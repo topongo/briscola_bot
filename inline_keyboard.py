@@ -15,12 +15,24 @@ class InlineKeyboard:
                     print(self.data)
 
         def send(self):
-            return list([{"text": i.text, "callback_data": i.data} for i in self.data])
+            o = []
+            for i in self.data:
+                d = {"text": i.text}
+                if i.data:
+                    d["callback_data"] = i.data
+                if i.url:
+                    d["url"] = i.url
+                o.append(d)
+            return list(o)
 
     class InlineKeyboardButton:
-        def __init__(self, text, callback_data=None):
+        def __init__(self, text, callback_data=None, url=None,):
             self.text = text
             self.data = callback_data
+            self.url = url
+
+            if not (self.url or self.data):
+                raise TypeError("at least one of url or callback_data arguments must be supplied")
 
     def __init__(self):
         self.data = []

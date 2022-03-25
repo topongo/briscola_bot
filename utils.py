@@ -1,17 +1,19 @@
 from typing import Callable
 from time import sleep
 from telebotapi import TelegramBot
+from copy import deepcopy
 
 
-def comma_and(_list):
-    if len(_list) == 0:
+def comma_and(list_, at_):
+    list__ = [f"@{i}" for i in deepcopy(list_)]
+    if len(list__) == 0:
         return "Nessuno"
-    elif len(_list) == 1:
-        return _list[0]
-    elif len(_list) == 2:
-        return " e ".join(_list)
+    elif len(list__) == 1:
+        return list__[0]
+    elif len(list__) == 2:
+        return " e ".join(list__)
     else:
-        return ", ".join(_list[:-1]) + f" e {_list[-1]}"
+        return ", ".join(list__[:-1]) + f" e {list__[-1]}"
 
 
 def escape(text):
@@ -43,9 +45,6 @@ def wait_for(t: TelegramBot, *conditions: tuple[iter, bool, Callable], ender=Non
             print("Exception caught")
             return False
 
-    print()
-    print()
-    print()
     while True:
         for u in t.get_updates():
             print(u.raw)
