@@ -9,7 +9,6 @@ from game import *
 t = TelegramBot("5129062759:AAHiYep3v1IcU8DBHU69qphiEuWmsFlbQgM")
 t.bootstrap()
 
-
 x = InlineKeyboard()
 
 
@@ -31,13 +30,10 @@ while True:
                 txt = up.content.text
                 ms_id = up.content.id
                 print(txt.split(" ")[0] != "!briscola")
-                if txt.split(" ")[0] != "!briscola":
+
+                if (args := parse_briscola_commands(txt)) is None:
                     continue
-                else:
-                    if len(txt.split(" ")) == 1 or len(txt.split(" ")[1]) == 0:
-                        args = []
-                    else:
-                        args = txt.split(" ")[1:]
+
                 print(fr, ch, txt, args, up.content.entities)
                 print()
                 print(up.content.raw)
@@ -61,39 +57,54 @@ while True:
             if len(args) == 1:
                 print(f"Not enough arguments for a new game")
             else:
+                players = args[1:]
                 m_sent = TelegramBot.Update.Message.detect_type(None,
-                                                             {"message":
-                                                                  t.sendMessage(ch, escape(
-                                                                      f"{comma_and(args[1:])}"
-                                                                      f"rispondete \"ok\" a questo messaggio per"
-                                                                      f" iniziare una nuova partita insieme.", )
-                                                                                )["result"]
-                                                              })[0]
+                                                                {"message":
+                                                                     t.sendMessage(ch, escape(
+                                                                         f"{comma_and(args[1:])}"
+                                                                         f"rispondete \"ok\" a questo messaggio per"
+                                                                         f" iniziare una nuova partita insieme.", )
+                                                                                   )["result"]
+                                                                 })[0]
 
                 conds = []
-                players = {}
+                joined = {}
 
-                for i in args[1:]:
+                for n, i in enumerate(players):
+
                     fils = (
                         (
                             lambda l: l.from_.username,
-                            lambda l: l == i.replace("@", "")
+                            lambda l: l == players[n].replace("@", "")
                         ),
                         (
-                            lambda l: l.reply_from_message.id,
+                            lambda l: l.reply_to_message.id,
                             lambda l: l == m_sent.id
+                        ),
+                        (
+                            lambda l: l.text,
+                            lambda l: is_briscola_command(l)
                         )
                     )
 
+
                     def clb(msg):
-                        players[msg.from_.username] = ("si" in msg.text.lower() or
-                                                       "yes" in msg.text.lower() or
-                                                       "ok" in msg.text.lower())
+                        if a := parse_briscola_commands(msg.text):
+                            if a[0] in "si ok yes":
+                                joined[msg.from_.username] = True
+                                t.sendMessage(msg.chat, "Ora sei iscritto alla partita!", reply_to_message=msg)
+
+                        joined[msg.from_.username] = False
+                        t.sendMessage(msg.chat, "Hai rifiutato l'invito."
+                                                "Rispondi di nuovo affermativamente per rientrare",
+                                      reply_to_message=msg)
+
+
                     conds.append(
                         (fils, False, clb)
                     )
 
-                wait_for(t, *conds, ender=lambda l: len(players) == len(args[1:]))
+                wait_for(t, *conds, ender=lambda l: len(joined) == len(args[1:]))
 
         elif is_command(args, "test"):
             t.sendMessage(ch, escape("Testing InlineKeyboards, ladies and gentlemen:"),
