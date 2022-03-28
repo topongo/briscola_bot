@@ -2,6 +2,8 @@ from typing import Callable
 from time import sleep
 from telebotapi import TelegramBot
 from copy import deepcopy
+from datetime import datetime, timedelta
+from inspect import getsource
 
 
 def comma_and(list_, at_):
@@ -26,37 +28,64 @@ def is_command(args_, *matches):
             return True
 
 
-def wait_for(t: TelegramBot, *conditions: tuple[iter, bool, Callable], ender=None):
-    cond = []
-    for i in conditions:
-        cond.append({
-            "callback": i[2],
-            "filter": i[0],
-            "stop": i[1]
-        })
+class Filter:
+    def __init__(self, comparer: Callable):
+        self.comparer = comparer
 
-    def do(callback_, mess_):
-        callback_(mess_)
-
-    def confront(mess_, get_prop_, filter_prop_):
+    def call(self, msg):
         try:
-            return filter_prop_(get_prop_(mess_))
+            return self.comparer(msg)
         except AttributeError:
             print("Exception caught")
             return False
 
+    def __str__(self):
+        return f"Filter(\"{getsource(self.comparer).strip()}\""
+
+    def __repr__(self):
+        return str(self)
+
+
+class Condition:
+    def __init__(self, *filters: Filter, callback=lambda l: None, stop_return=None):
+        self.callback = callback
+        self.stop_return = stop_return
+        self.filters = list(filters)
+
+    def add_filter(self, *f):
+        for i in f:
+            self.filters.append(i)
+
+    def meet(self, msg):
+        return all(map(lambda l: l.call(msg), self.filters))
+
+    def __str__(self):
+        return f"Condition(\n    filters=[\n        " + ",\n        ".join(map(lambda l: str(l), self.filters))\
+               + f"\n    ],\n    callback=\"{self.callback}\"," \
+                 f"\n    stop_return={self.stop_return}\n)"
+
+    def __repr__(self):
+        return str(self)
+
+
+def wait_for(t: TelegramBot,
+             *conditions: Condition,
+             timeout=300):
+
+    t.daemon.delay = 0.5
+
+    timeout_end = datetime.now() + timedelta(seconds=timeout)
+
     while True:
         for u in t.get_updates():
-            print(u.raw)
-            for c in cond:
-                if all(map(lambda l: confront(u.content, l[0], l[1]), c["filter"])):
-                    c["callback"](u.content)
-                    if c["stop"]:
-                        return
-        if ender:
-            if ender(None):
-                return
-        sleep(1)
+            for c in conditions:
+                if c.meet(u.content):
+                    c.callback(u.content)
+                    if c.stop_return is not None:
+                        return c.stop_return
+        if timeout_end < datetime.now():
+            return False
+        sleep(0.1)
 
 
 def parse_briscola_commands(txt):
@@ -71,12 +100,7 @@ def is_briscola_command(txt) -> int:
     if len(txt) >= 9:
         if txt[:9] == "!briscola":
             return 1
-        else:
-            return 0
-    elif len(txt) >= 3:
+    if len(txt) >= 3:
         if txt[:3] == "!br":
             return 2
-        else:
-            return 0
-    else:
-        return 0
+    return 0

@@ -1,185 +1,88 @@
 from telebotapi import TelegramBot
-from time import sleep
-from datetime import datetime, timedelta
-from json import dumps
 from utils import *
 from inline_keyboard import *
-from game import *
-
-t = TelegramBot("5129062759:AAHiYep3v1IcU8DBHU69qphiEuWmsFlbQgM")
-t.bootstrap()
-
-x = InlineKeyboard()
 
 
-def send_help(ch_, pref):
-    t.sendMessage(ch_, escape(f"{pref}\nMALEPORCO DETTO SCRIVI L'HELP QUI"))
+class Briscola:
+    def __init__(self, t: TelegramBot, *players: TelegramBot.User):
+        self.players = list([Player(u) for u in players])
+        self.master = players
+        if len(self.players) == 1:
+            raise TypeError("you can't play by yourself")
+        if len(self.players) == 3:
+            raise NotImplementedError("3 players game not yet implemented")
+        self.teams = len(self.players) == 4
+        self.t = t
+        self.master = self.players[0]
 
+    def run(self):
+        sent_msgs = {}
+        for n, i in enumerate(self.players):
+            sent_msgs[i.user.username] = i.send_welcome(self.t, self.master)
 
-while True:
-    for up in t.get_updates():
-        try:
-            if isinstance(up.content, TelegramBot.Update.Message):
-                fr = up.content.from_
-                ch = up.content.chat
-                txt = up.content.text
-                ms = up.content
+        conds = []
+        ok = []
+        to_delete = []
 
-                if (args := parse_briscola_commands(txt)) is None:
-                    continue
-            else:
-                continue
-        except Exception as e:
-            raise e
-
-        if len(args) == 0:
-            send_help(ch, "Nessun comando inviato, ecco come usare il bot:\n")
-
-        elif is_command(args, "newgame", "new_game"):
-            if len(args) == 0:
-                t.sendMessage(ch, "Non puoi giocare da solo!", reply_to_message=ms)
-            elif len(args) > 4:
-                t.sendMessage(ch, "Non puoi giocare in piu' di 4 persone!", reply_to_message=ms)
-            else:
-                players = [fr.username]
-                for i in (j.replace("@", "") for j in args[1:]):
-                    if i not in players:
-                        players.append(i)
-
-                apply_form = InlineKeyboard()
-                apply_form.add_row(
-                    InlineKeyboard.InlineKeyboardButton("Accetta", "a"),
-                    InlineKeyboard.InlineKeyboardButton("Rifiuta", "c")
+        def clb(msg):
+            self.t.answerCallbackQuery(msg, "Ok!")
+            if len(ok) == len(self.players):
+                return
+            if msg.from_.username not in ok:
+                to_delete.append(
+                    TelegramBot.Update.Message.detect_type(
+                        None,
+                        self.t.sendMessage(msg.from_,
+                                           "Perfetto! Attendi che anche gli altri giocatori confermino.")
+                    )[0]
                 )
-                apply_form.add_row(
-                    InlineKeyboard.InlineKeyboardButton("Inizia Partita", "_s")
-                )
+                ok.append(msg.from_.username)
 
-                joined = {
-                    players[0]: True
-                }
+        conds.append(Condition(
+            Filter(lambda l: l.from_.username in map(lambda j: j.user.username, self.players)),
+            Filter(lambda l: l.original_message.id == sent_msgs[l.from_.username]),
+            Filter(lambda l: l.data == "g_start"),
+            callback=clb
+        ))
 
-                def body():
-                    return escape(
-                        f"{comma_and(players, at_=True)} "
-                        f"cliccate su uno dei pulsanti per accettare"
-                        f" o rifiutare.\n\n"
-                        f"Risposte: {len(joined)}/{len(players)}\n"
-                        f"Affermative: {len([k for k, i_ in joined.items() if i_])}/{len(joined)}"
-                    )
+        conds.append(Condition(
+            Filter(lambda l: l.from_.username in [i_.user.username for i_ in self.players]),
+            Filter(lambda l: len(ok) == len(self.players)),
+            Filter(lambda l: l.data == "g_start"),
+            stop_return=True
+        ))
 
-                m_sent = \
-                    TelegramBot.Update.Message.detect_type(None,
-                                                           {
-                                                               "message":
-                                                                   t.sendMessage(ch, body(),
-                                                                                 reply_markup=gen_inline_markup(
-                                                                                     apply_form, ms.id
-                                                                                 ))["result"]
-                                                           })[0]
+        if wait_for(self.t, *conds):
+            for i in to_delete:
+                self.t.deleteMessage(i)
+            for i in self.players:
+                i.send_mess(self.t, "Tutti i giocatori hanno accettato,"
+                                    " che la partita abbia inizio!")
 
-                conds = []
-
-                for n, i in enumerate(players):
-                    fils = (
-                        (
-                            lambda l: l.from_.username,
-                            lambda l: l in players
-                        ),
-                        (
-                            lambda l: l.original_message.id,
-                            lambda l: l == m_sent.id
-                        ),
-                        (
-                            lambda l: l.data,
-                            lambda l: l[0] != "_"
-                        )
-                    )
+        # now the game actually begins
 
 
-                    def clb(msg):
-                        mod = False
-                        if msg.data == "a":
-                            try:
-                                if joined[msg.from_.username]:
-                                    t.answerCallbackQuery(msg, "Sei gia' iscritto!")
-                                else:
-                                    joined[msg.from_.username] = True
-                                    t.answerCallbackQuery(msg, "Ora sei iscritto alla partita!")
-                                    mod = True
-                            except KeyError:
-                                joined[msg.from_.username] = True
-                                t.answerCallbackQuery(msg, "Ora sei iscritto alla partita!")
-                                mod = True
-                        else:
-                            try:
-                                if not joined[msg.from_.username]:
-                                    t.answerCallbackQuery(msg, "Hai gia' rifiutato l'invito.")
-                                else:
-                                    joined[msg.from_.username] = False
-                                    t.answerCallbackQuery(msg, "Hai rifiutato l'invito.")
-                                    mod = True
-                            except KeyError:
-                                joined[msg.from_.username] = False
-                                t.answerCallbackQuery(msg, "Hai rifiutato l'invito.")
-                                mod = True
-
-                        if mod:
-                            t.editMessageText(msg.original_message,
-                                              body(),
-                                              reply_markup=gen_inline_markup(apply_form, ms.id))
 
 
-                    conds.append(
-                        (fils, False, clb)
-                    )
 
-                def clb_start(msg):
-                    if msg.from_.username != players[0]:
-                        t.answerCallbackQuery(msg, "Non puoi avviare la partita, non sei amministratore")
-                    else:
-                        if len(joined) == 1:
-                            t.answerCallbackQuery(msg, "Troppi pochi giocatori!")
-                        elif len(joined) == 3:
-                            t.answerCallbackQuery(msg, "Partite in 3 giocatori non sono (ancora) supportate!")
-                        else:
-                            t.answerCallbackQuery(msg, "Partita avviata in privato!")
-                            link_to_private = InlineKeyboard()
-                            link_to_private.add_row(
-                                InlineKeyboard.InlineKeyboardButton("Vai in chat.",
-                                                                    url=f"tg://user?id={t}")
-                            )
-                            t.sendMessage(ch, "Partita avviata in privato!",
-                                          reply_to_message=m_sent,
-                                          reply_markup=gen_inline_markup(link_to_private, ms.id)
-                                          )
+class Player:
+    def __init__(self, user: TelegramBot.User):
+        self.user = user
+        self.interface = InlineKeyboard()
+
+    def send_keyboard(self, t: TelegramBot):
+        t.sendMessage(self.user, "Test", reply_markup=gen_inline_markup(self.interface))
+
+    def send_welcome(self, t: TelegramBot, master):
+        self.interface.add_row(InlineKeyboard.InlineKeyboardButton("Inizia!", "g_start"))
+        return TelegramBot.Update.Message.detect_type(
+            None,
+            t.sendMessage(self.user, f"La partita proposta da @{master.user.username} sta per iniziare, premi il "
+                                     f"tasto qui sotto per iniziare.",
+                          reply_markup=gen_inline_markup(self.interface)))[0].id
+
+    def send_mess(self, t: TelegramBot, txt, **other):
+        t.sendMessage(self.user, txt, **other)
 
 
-                conds.append(
-                    (
-                        (
-                            (
-                                lambda l: l.from_.username,
-                                lambda l: l == players[0]
-                            ),
-                            (
-                                lambda l: l.original_message.id,
-                                lambda l: l == m_sent.id
-                            ),
-                            (
-                                lambda l: l.data,
-                                lambda l: l == "_s"
-                            )
-                        ),
-                        False,
-                        clb_start
-                    ))
 
-                wait_for(t, *conds)
-
-        elif is_command(args, "test"):
-            t.sendMessage(ch, escape("Testing InlineKeyboards, ladies and gentlemen:"),
-                          reply_markup=gen_inline_markup(x, ms.id),
-                          parse_mode="HTML")
-
-    sleep(1)

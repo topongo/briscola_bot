@@ -44,8 +44,7 @@ class InlineKeyboard:
         return list([i.send() for i in self.data])
 
 
-def gen_inline_markup(inline, m_i):
+def gen_inline_markup(inline):
     return escape(dumps({
-        "inline_keyboard": inline.send(),
-        "reply_to_message_id": m_i
+        "inline_keyboard": inline.send()
     }))
