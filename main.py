@@ -1,10 +1,11 @@
-from telebotapi import TelegramBot
 from time import sleep
-from datetime import datetime, timedelta
-from json import dumps
-from utils import *
-from inline_keyboard import *
-from briscola import *
+from utils import escape, parse_briscola_commands, is_briscola_command, is_command, comma_and, Filter, Condition, \
+    wait_for
+from briscola import GameTelegram
+from telebotapi import TelegramBot
+from inline_keyboard import InlineKeyboard, gen_inline_markup
+from json import load
+
 
 t = TelegramBot("5129062759:AAHiYep3v1IcU8DBHU69qphiEuWmsFlbQgM")
 t.bootstrap()
@@ -12,6 +13,16 @@ t.bootstrap()
 
 def send_help(ch_, pref):
     t.sendMessage(ch_, escape(f"{pref}\nMALEPORCO DETTO SCRIVI L'HELP QUI"))
+
+
+# @@@@@@@@@@@@@@@
+players = []
+for i in ("topongo", "degra"):
+    players.append(TelegramBot.User(load(open(f"testing/{i}.json"))))
+
+b = GameTelegram(t, *players)
+b.run()
+# @@@@@@@@@@@@@@@
 
 
 while True:
@@ -46,7 +57,7 @@ while True:
             elif len(args) > 5:
                 t.sendMessage(ch, "Non puoi giocare in piu' di 4 persone!", reply_to_message=ms)
             else:
-                players = [fr.username]
+                players = [fr.id]
                 for i in (j.replace("@", "") for j in args[1:]):
                     if i not in players:
                         players.append(i)
@@ -95,31 +106,34 @@ while True:
 
                 for n, i in enumerate(players):
                     def clb(msg):
+                        if msg.from_.id == joined[0]:
+                            t.answerCallbackQuery(msg, "Sei l'amministratore, non puoi rifiutare l'invito!")
+                            return
                         mod = False
                         if msg.data == "a":
                             try:
-                                if joined[msg.from_.username]:
+                                if joined[msg.from_.id]:
                                     t.answerCallbackQuery(msg, "Sei gia' iscritto!")
                                 else:
-                                    joined[msg.from_.username] = True
-                                    joined_obj[msg.from_.username] = msg.from_
+                                    joined[msg.from_.id] = True
+                                    joined_obj[msg.from_.id] = msg.from_
                                     t.answerCallbackQuery(msg, "Ora sei iscritto alla partita!")
                                     mod = True
                             except KeyError:
-                                joined[msg.from_.username] = True
-                                joined_obj[msg.from_.username] = msg.from_
+                                joined[msg.from_.id] = True
+                                joined_obj[msg.from_.id] = msg.from_
                                 t.answerCallbackQuery(msg, "Ora sei iscritto alla partita!")
                                 mod = True
                         else:
                             try:
-                                if not joined[msg.from_.username]:
+                                if not joined[msg.from_.id]:
                                     t.answerCallbackQuery(msg, "Hai gia' rifiutato l'invito.")
                                 else:
-                                    joined[msg.from_.username] = False
+                                    joined[msg.from_.id] = False
                                     t.answerCallbackQuery(msg, "Hai rifiutato l'invito.")
                                     mod = True
                             except KeyError:
-                                joined[msg.from_.username] = False
+                                joined[msg.from_.id] = False
                                 t.answerCallbackQuery(msg, "Hai rifiutato l'invito.")
                                 mod = True
 
@@ -130,7 +144,7 @@ while True:
 
                     conds.append(
                         Condition(
-                            Filter(lambda l: l.from_.username in players),
+                            Filter(lambda l: l.from_.id in players),
                             Filter(lambda l: l.original_message.id == m_sent.id),
                             Filter(lambda l: l.data[0] != "_"),
                             callback=clb
@@ -138,7 +152,7 @@ while True:
                     )
 
                 def clb_start(msg):
-                    if msg.from_.username != players[0]:
+                    if msg.from_.id != players[0]:
                         t.answerCallbackQuery(msg, "Non puoi avviare la partita, non sei amministratore")
                     else:
                         if len(joined) == 1:
@@ -158,14 +172,14 @@ while True:
                                           )
 
                 conds.append(Condition(
-                    Filter(lambda l: l.from_.username == players[0]),
+                    Filter(lambda l: l.from_.id == players[0]),
                     Filter(lambda l: l.original_message.id == m_sent.id),
                     Filter(lambda l: l.data == "_s"),
                     callback=clb_start,
                     stop_return=True
                 ))
                 conds.append(Condition(
-                    Filter(lambda l: l.from_.username == players[0]),
+                    Filter(lambda l: l.from_.id == players[0]),
                     Filter(lambda l: is_briscola_command(l.text)),
                     Filter(lambda l: len(parse_briscola_commands(l.text)) > 0
                                      and parse_briscola_commands(l.text)[0] == "cancel"),
@@ -180,7 +194,7 @@ while True:
                     """#################
                     joined_obj["Lyreplus"] = TelegramBot.User({"id": fr.id, "username": "Lyreplus"})
                     #################"""
-                    g = Briscola(t, *[i for k, i in joined_obj.items() if joined[k]])
+                    g = GameTelegram(t, *[i for k, i in joined_obj.items() if joined[k]])
                     g.run()
                 else:
                     t.daemon.delay = t_d

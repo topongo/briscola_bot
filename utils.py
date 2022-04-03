@@ -19,7 +19,10 @@ def comma_and(list_, at_):
 
 
 def escape(text):
-    return text.replace("_", "\\_").replace("*", "\\*")
+    out = text
+    for i in ("_", "*"):
+        out = out.replace(i, f"\\{i}")
+    return out
 
 
 def is_command(args_, *matches):
@@ -82,7 +85,10 @@ def wait_for(t: TelegramBot,
                 if c.meet(u.content):
                     c.callback(u.content)
                     if c.stop_return is not None:
-                        return c.stop_return
+                        if isinstance(c.stop_return, Callable):
+                            return c.stop_return(u.content)
+                        else:
+                            return c.stop_return
         if timeout_end < datetime.now():
             return False
         sleep(0.1)

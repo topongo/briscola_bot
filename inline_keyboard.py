@@ -1,7 +1,3 @@
-from utils import *
-from json import dumps
-
-
 class InlineKeyboard:
     class InlineKeyboardRow:
         def __init__(self, *buttons):
@@ -45,6 +41,13 @@ class InlineKeyboard:
 
 
 def gen_inline_markup(inline):
+    from utils import escape
+    from json import dumps
+
+    print(escape(dumps({
+        "inline_keyboard": inline.send()
+    })))
+
     return escape(dumps({
         "inline_keyboard": inline.send()
     }))
