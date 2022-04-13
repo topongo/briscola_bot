@@ -7,7 +7,7 @@ from inline_keyboard import InlineKeyboard, gen_inline_markup
 from json import load
 
 
-t = TelegramBot("5129062759:AAHiYep3v1IcU8DBHU69qphiEuWmsFlbQgM")
+t = TelegramBot("5129062759:AAHiYep3v1IcU8DBHU69qphiEuWmsFlbQgM", safe_mode=True)
 t.bootstrap()
 
 
@@ -17,7 +17,7 @@ def send_help(ch_, pref):
 
 # @@@@@@@@@@@@@@@
 players = []
-for i in ("topongo", "degra"):
+for i in ("topongo", "degra", "lyreplus"):
     players.append(TelegramBot.User(load(open(f"testing/{i}.json"))))
 
 b = GameTelegram(t, *players)
@@ -93,14 +93,15 @@ while True:
                     )
 
                 m_sent = \
-                    TelegramBot.Update.Message.detect_type(None,
-                                                           {
-                                                               "message":
-                                                                   t.sendMessage(ch, body(),
-                                                                                 reply_markup=gen_inline_markup(
-                                                                                     apply_form
-                                                                                 ))["result"]
-                                                           })[0]
+                    TelegramBot.Update.Message.detect_type(
+                        {
+                            "message":
+                                t.sendMessage(ch, body(),
+                                              reply_markup=gen_inline_markup(
+                                                  apply_form
+                                              ))["result"]
+                        }
+                    )
 
                 conds = []
 
