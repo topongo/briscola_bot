@@ -17,7 +17,7 @@ def send_help(ch_, pref):
 
 # @@@@@@@@@@@@@@@
 players = []
-for i in ("topongo", "degra", "lyreplus"):
+for i in ("topongo", "degra"):
     players.append(TelegramBot.User(load(open(f"testing/{i}.json"))))
 
 b = GameTelegram(t, *players)

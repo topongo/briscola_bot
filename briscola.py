@@ -4,7 +4,6 @@ from telebotapi import TelegramBot
 from inline_keyboard import InlineKeyboard, gen_inline_markup
 from utils import Filter, Condition, wait_for, escape, is_briscola_command, parse_briscola_commands
 from emoji import emojize
-from copy import deepcopy
 
 
 class GameTelegram:
@@ -92,7 +91,7 @@ class GameTelegram:
             """
             if g.latest_turn:
                 latest_turn = f"Ultimo turno:\n" \
-                              f" - Vincitore: {g.latest_turn['winner'].user.username}\n" \
+                              f" - Vincitore: {g.latest_turn['winner']}\n" \
                               f" - Carte giocate:\n" + \
                               g.latest_turn["cards"] + \
                               f" - Punti: {g.latest_turn['points']}\n"
@@ -123,7 +122,9 @@ class GameTelegram:
                                   ))
 
         self.game = Briscola(*self.players)
-        self.game.play(self.t, clb_send_interface, clb_fetch)
+        winner = self.game.play(self.t, clb_send_interface, clb_fetch)
+        for i in self.players:
+            self.t.sendMessage(i.user, f"La partita si è conclusa, il vincitore è @{winner.user.username}")
 
 
 class Card:
@@ -244,7 +245,6 @@ class Briscola(Game):
         self.gen_deck()
         self.briscola = None
         self.latest_turn = None
-        self.first = self.players[0]
         self.setup()
 
     def gen_deck(self):
@@ -261,9 +261,10 @@ class Briscola(Game):
             for p in self.players:
                 p.add(self.deck.pop(0))
         self.briscola = self.deck.pop(0)
+        self.deck.append(self.briscola)
 
     def _player_ordered(self):
-        ind = self.players.index(self.first)
+        ind = self.players.index(self.playing)
         for i in range(len(self.players)):
             yield self.players[(ind + i) % len(self.players)]
 
@@ -293,6 +294,9 @@ class Briscola(Game):
                         w_p, w_c = pl, c
         return w_p, p
 
+    def winner(self):
+        return max(self.players, key=lambda l: l.points)
+
     def play(self, t: TelegramBot, callback_send_info: Callable[[Game, Player], None],
              callback_fetch: Callable[[Player, TelegramBot, Game], int]):
         def send_interface():
@@ -300,7 +304,7 @@ class Briscola(Game):
                 callback_send_info(self, pl)
 
         send_interface()
-        while True:
+        while len(self.deck) and sum(map(lambda l: len(l.cards), self.players)):
             self.table = {}
             for p in self._player_ordered():
                 self.playing = p
@@ -313,7 +317,8 @@ class Briscola(Game):
             # every player has thrown their card
             self.playing, p = self.turn_winner()
             self.playing.add_points(p)
-            self.draw()
+            if len(self.deck) != 0:
+                self.draw()
             cards = ""
             for pl, ca in self.table.items():
                 cards += f"   - **@{pl.user.username}: {self.represent_card(ca)}**\n"
@@ -322,6 +327,8 @@ class Briscola(Game):
                 "cards": cards,
                 "points": p
             }
+
+        return self.winner()
 
     def gen_info(self, p: Player):
         return f""
@@ -389,7 +396,7 @@ class PlayerTelegram(Player):
         elif ret is False:
             for pl in [pla for pla in g.players if pla is not self]:
                 t.sendMessage(pl.user, f"@{pl.user.username} non ha messo carte per 5 minuti.\n"
-                                  f"Purtroppo la partita finisce qui.")
+                                       f"Purtroppo la partita finisce qui.")
             return -1
         else:
             return ret
